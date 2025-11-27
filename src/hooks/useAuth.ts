@@ -1,5 +1,3 @@
-// src/hooks/useAuth.ts
-
 import React, { useState, useEffect, useContext, createContext } from 'react';
 import {
   getAuth,
@@ -14,7 +12,7 @@ import {
 import { auth } from '@/lib/firebase';
 import { AuthCredentials } from '@/types/auth'; 
 
-// Interface yang mendefinisikan bentuk nilai yang disediakan oleh AuthContext
+// Interface untuk nilai yang diberikan oleh AuthContext
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -26,17 +24,16 @@ interface AuthContextType {
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
 }
 
-// ✅ KEMBALI KE NAMA ASLI: AuthContext
+// Membuat AuthContext
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// AuthProvider adalah komponen utama yang menyediakan konteks autentikasi.
+// Provider utama
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Subscription ke Firebase Auth State
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
@@ -44,7 +41,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // [Fungsi login, register, logout, resetPassword, updateUserProfile, dst. tetap sama]
   const login = async (credentials: AuthCredentials) => {
     setLoading(true);
     setError(null);
@@ -52,7 +48,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
     } catch (err: any) {
       setError(err.message);
-      console.error("Login failed:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -66,15 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       if (userCredential.user) {
         await updateProfile(userCredential.user, { displayName });
-        setUser({ 
-          ...userCredential.user, 
-          displayName, 
-          photoURL: userCredential.user.photoURL || null
-        });
+        setUser({ ...userCredential.user, displayName, photoURL: userCredential.user.photoURL || null });
       }
     } catch (err: any) {
       setError(err.message);
-      console.error("Registration failed:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -88,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signOut(auth);
     } catch (err: any) {
       setError(err.message);
-      console.error("Logout failed:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -102,7 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await sendPasswordResetEmail(auth, email);
     } catch (err: any) {
       setError(err.message);
-      console.error("Password reset failed:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -115,17 +103,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, { displayName, photoURL });
-        setUser({ 
-          ...auth.currentUser, 
-          displayName, 
-          photoURL: photoURL === undefined ? null : photoURL
-        });
+        setUser({ ...auth.currentUser, displayName, photoURL: photoURL ?? null });
       } else {
         throw new Error("No user is logged in to update profile.");
       }
     } catch (err: any) {
       setError(err.message);
-      console.error("Profile update failed:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -133,25 +116,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value: AuthContextType = {
-    user, loading, error, login, register, logout, resetPassword, updateUserProfile,
+    user,
+    loading,
+    error,
+    login,
+    register,
+    logout,
+    resetPassword,
+    updateUserProfile,
   };
 
-  // ✅ SOLUSI WRAPPER: Menggunakan Wrapper Komponen dengan nama AuthContext yang benar
-  // Ini menghindari Vercel build environment salah menginterpretasikan AuthContext sebagai namespace
-  const ProviderWrapper = ({ children }: { children: React.ReactNode }) => {
-    // Menggunakan AuthContext.Provider di dalam komponen Wrapper
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-  };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
 
-  // Mengembalikan wrapper
-  return <ProviderWrapper>{children}</ProviderWrapper>;
-}
-
-// useAuth hook untuk mengonsumsi nilai dari AuthContext
+// Hook untuk konsumsi AuthContext
 export const useAuth = () => {
-  const context = useContext(AuthContext); // Menggunakan AuthContext
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context as AuthContextType; 
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
 };
