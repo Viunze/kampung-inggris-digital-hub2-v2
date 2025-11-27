@@ -27,6 +27,7 @@ interface AuthContextType {
 }
 
 // Membuat AuthContext. Nilai default-nya adalah 'undefined' yang akan dicek oleh useAuth hook.
+// DEFINISI INI HARUS ADA DI SINI, DI LUAR KOMPONEN.
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // AuthProvider adalah komponen yang akan membungkus bagian dari aplikasi Anda
@@ -69,7 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       if (userCredential.user) {
         await updateProfile(userCredential.user, { displayName });
-        setUser({ ...userCredential.user, displayName }); // Perbarui state user lokal
+        // Perbarui state user lokal, memastikan photoURL yang valid (string atau null)
+        setUser({ 
+          ...userCredential.user, 
+          displayName, 
+          photoURL: userCredential.user.photoURL || null // Pastikan photoURL adalah string atau null
+        });
       }
     } catch (err: any) {
       setError(err.message);
@@ -110,33 +116,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-// Fungsi untuk memperbarui profil pengguna
-const updateUserProfile = async (displayName: string, photoURL?: string) => {
-  setLoading(true);
-  setError(null);
-  try {
-    if (auth.currentUser) {
-      // Perbarui profil di Firebase Auth
-      await updateProfile(auth.currentUser, { displayName, photoURL });
+  // Fungsi untuk memperbarui profil pengguna
+  const updateUserProfile = async (displayName: string, photoURL?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (auth.currentUser) {
+        // Perbarui profil di Firebase Auth
+        await updateProfile(auth.currentUser, { displayName, photoURL });
 
-      // Perbarui state user lokal dengan memastikan photoURL yang valid (string atau null)
-      // Mengatasi Type 'undefined' is not assignable to type 'string | null'.
-      setUser({ 
-        ...auth.currentUser, 
-        displayName, 
-        photoURL: photoURL === undefined ? null : photoURL // Konversi undefined menjadi null
-      });
-    } else {
-      throw new Error("No user is logged in to update profile.");
+        // Perbarui state user lokal dengan memastikan photoURL yang valid (string atau null)
+        setUser({ 
+          ...auth.currentUser, 
+          displayName, 
+          photoURL: photoURL === undefined ? null : photoURL // Konversi undefined menjadi null
+        });
+      } else {
+        throw new Error("No user is logged in to update profile.");
+      }
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Profile update failed:", err);
+      throw err;
+    } finally {
+      setLoading(false);
     }
-  } catch (err: any) {
-    setError(err.message);
-    console.error("Profile update failed:", err);
-    throw err;
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Nilai yang akan disediakan oleh konteks
   const value = {
