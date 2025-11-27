@@ -2,14 +2,84 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 import MainLayout from '@/components/Layout/MainLayout';
 import Card from '@/components/UI/Card';
 import { useAuth } from '@/hooks/useAuth';
 import { useFirestoreData } from '@/hooks/useFirestoreData';
 import { ForumPost, Reply } from '@/types/models';
-import { getDocById, addDocument, updateDocument } from '@/lib/firestore'; // Impor fungsi yang diperlukan
-import { orderBy, query, where } from 'firebase/firestore'; // Untuk query
+import { getDocById, addDocument, updateDocument, deleteDocument } from '@/lib/firestore'; // Import deleteDocument
+import { orderBy, query, where } from 'firebase/firestore';
+
+// Komponen Modal Edit Reply (BARU)
+interface EditReplyModalProps {
+  reply: Reply;
+  onClose: () => void;
+  onSave: (replyId: string, newContent: string) => void;
+  loading: boolean;
+  error: string | null;
+}
+
+const EditReplyModal: React.FC<EditReplyModalProps> = ({ reply, onClose, onSave, loading, error }) => {
+  const [editedContent, setEditedContent] = useState(reply.content);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editedContent.trim()) {
+      alert("Konten balasan tidak boleh kosong!");
+      return;
+    }
+    onSave(reply.id, editedContent.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="p-6 w-full max-w-lg relative">
+        <h2 className="text-2xl font-bold text-java-brown-dark mb-4">Edit Balasan</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="editReplyContent" className="block text-sm font-medium text-gray-700 mb-1">
+              Konten Balasan
+            </label>
+            <textarea
+              id="editReplyContent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-java-green-light focus:outline-none transition-colors h-24 resize-none"
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              disabled={loading}
+            ></textarea>
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+              disabled={loading}
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-java-green-dark text-white rounded-lg font-semibold hover:bg-java-green-light transition-colors"
+              disabled={loading || !editedContent.trim()}
+            >
+              {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+            </button>
+          </div>
+        </form>
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition-colors"
+          disabled={loading}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </Card>
+    </div>
+  );
+};
+
 
 const ForumPostDetailPage: React.FC = () => {
   const router = useRouter();
@@ -27,7 +97,14 @@ const ForumPostDetailPage: React.FC = () => {
 
   const [newReplyContent, setNewReplyContent] = useState('');
   const [submittingReply, setSubmittingReply] = useState(false);
-  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyCreationError, setReplyCreationError] = useState<string | null>(null);
+
+  // State untuk Edit/Hapus Balasan
+  const [showEditReplyModal, setShowEditReplyModal] = useState(false);
+  const [replyToEdit, setReplyToEdit] = useState<Reply | null>(null);
+  const [editingReply, setEditingReply] = useState(false);
+  const [editReplyError, setEditReplyError] = useState<string | null>(null);
+
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -54,20 +131,20 @@ const ForumPostDetailPage: React.FC = () => {
   const handleSubmitReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      setReplyError('Anda harus login untuk membalas.');
+      setReplyCreationError('Anda harus login untuk membalas.');
       return;
     }
     if (!newReplyContent.trim()) {
-      setReplyError('Isi balasan tidak boleh kosong.');
+      setReplyCreationError('Isi balasan tidak boleh kosong.');
       return;
     }
     if (!post) {
-      setReplyError('Postingan utama tidak ditemukan.');
+      setReplyCreationError('Postingan utama tidak ditemukan.');
       return;
     }
 
     setSubmittingReply(true);
-    setReplyError(null);
+    setReplyCreationError(null);
 
     try {
       const newReply: Omit<Reply, 'id' | 'timestamp' | 'createdAt' | 'updatedAt'> = {
@@ -76,21 +153,20 @@ const ForumPostDetailPage: React.FC = () => {
         authorName: user.displayName || user.email || 'Anonim',
         content: newReplyContent.trim(),
         likesCount: 0,
-        likedBy: [], // Inisialisasi array likedBy
+        likedBy: [],
       };
       await addDocument<Reply>('forumReplies', { ...newReply, timestamp: new Date() as any });
 
-      // Update repliesCount di postingan utama
-      // Perbarui state post lokal agar segera terlihat perubahan repliesCount
       if (post) {
         setPost(prevPost => prevPost ? { ...prevPost, repliesCount: (prevPost.repliesCount || 0) + 1 } : null);
       }
       await updateDocument('forumPosts', post.id, { repliesCount: (post.repliesCount || 0) + 1 });
 
       setNewReplyContent('');
+      alert('Balasan berhasil ditambahkan!'); // Notifikasi sukses
     } catch (err: any) {
       console.error("Error adding reply:", err);
-      setReplyError(err.message || 'Gagal mengirim balasan.');
+      setReplyCreationError(err.message || 'Gagal mengirim balasan.');
     } finally {
       setSubmittingReply(false);
     }
@@ -115,7 +191,6 @@ const ForumPostDetailPage: React.FC = () => {
         newLikedBy = [...newLikedBy, user.uid];
       }
 
-      // Perbarui state post lokal agar segera terlihat perubahan likesCount
       setPost(prevPost => prevPost ? { ...prevPost, likesCount: newLikesCount, likedBy: newLikedBy } : null);
       await updateDocument<ForumPost>('forumPosts', post.id, {
         likesCount: newLikesCount,
@@ -156,162 +231,33 @@ const ForumPostDetailPage: React.FC = () => {
     }
   };
 
+  // Handler untuk membuka modal edit balasan
+  const openEditReplyModal = (reply: Reply) => {
+    setReplyToEdit(reply);
+    setShowEditReplyModal(true);
+  };
 
-  if (postLoading) {
-    return <MainLayout title="Memuat Postingan..."><p className="text-center text-lg mt-10">Memuat detail postingan...</p></MainLayout>;
-  }
+  // Handler untuk menyimpan perubahan balasan
+  const handleSaveEditedReply = async (replyId: string, newContent: string) => {
+    setEditingReply(true);
+    setEditReplyError(null);
+    try {
+      await updateDocument<Reply>('forumReplies', replyId, { content: newContent });
+      setShowEditReplyModal(false);
+      setReplyToEdit(null);
+      alert('Balasan berhasil diperbarui!'); // Notifikasi sukses
+    } catch (err: any) {
+      console.error("Error updating reply:", err);
+      setEditReplyError(err.message || 'Gagal memperbarui balasan.');
+    } finally {
+      setEditingReply(false);
+    }
+  };
 
-  if (postError) {
-    return <MainLayout title="Error"><p className="text-center text-red-500 text-lg mt-10">{postError}</p></MainLayout>;
-  }
-
-  if (!post) {
-    return <MainLayout title="Tidak Ditemukan"><p className="text-center text-gray-600 text-lg mt-10">Postingan tidak ditemukan.</p></MainLayout>;
-  }
-
-  return (
-    <MainLayout title={`Angkringan: ${post.content.substring(0, 30)}...`}>
-      <div className="mb-8">
-        <button
-          onClick={() => router.push('/angkringan')}
-          className="flex items-center text-java-green-dark hover:underline mb-4"
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-          Kembali ke Angkringan
-        </button>
-        <h1 className="text-4xl font-bold text-java-brown-dark">Detail Postingan</h1>
-      </div>
-
-      {/* Postingan Utama */}
-      <Card className="p-6 mb-8 border-l-8 border-java-orange">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xl font-bold text-java-brown-dark">{post.authorName}</span>
-          <span className="text-gray-500 text-sm">
-            {post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString() : 'Tanggal tidak diketahui'}
-          </span>
-        </div>
-        <p className="text-gray-800 leading-relaxed text-lg mb-4">{post.content}</p>
-        <div className="flex items-center text-sm text-gray-600 space-x-4 pt-2 border-t border-gray-100">
-          <button
-            onClick={handleLikePost} // Panggil handler like postingan
-            className={`flex items-center transition-colors ${
-              user && post.likedBy && post.likedBy.includes(user.uid)
-                ? 'text-red-500'
-                : 'hover:text-java-green-dark'
-            }`}
-            disabled={!user || authLoading}
-          >
-            <svg
-              className={`w-4 h-4 mr-1 ${
-                user && post.likedBy && post.likedBy.includes(user.uid) ? 'fill-current' : 'fill-none'
-              }`}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              ></path>
-            </svg>
-            <span>{post.likesCount || 0} Suka</span>
-          </button>
-          <span className="flex items-center">
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.003 9.003 0 01-4.878-1.333M12 3c4.418 0 8 4.03 8 9s-3.582 9-8 9-9-4.03-9-9 4.03-9 9-9z"></path></svg>
-            <span>{replies.length || 0} Balasan</span>
-          </span>
-        </div>
-      </Card>
-
-      {/* Form Balasan Baru */}
-      <Card className="p-6 mb-8">
-        <h2 className="text-2xl font-bold text-java-brown-dark mb-4">Balas Postingan Ini</h2>
-        {!user ? (
-          <p className="text-gray-600">
-            Anda harus{' '}
-            <Link href="/auth/login" legacyBehavior>
-              <a className="text-java-green-dark hover:underline font-semibold">login</a>
-            </Link>{' '}
-            untuk membalas postingan ini.
-          </p>
-        ) : (
-          <form onSubmit={handleSubmitReply} className="space-y-4">
-            <div>
-              <textarea
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-java-green-light focus:outline-none transition-colors h-24 resize-none"
-                placeholder="Tulis balasan Anda di sini..."
-                value={newReplyContent}
-                onChange={(e) => setNewReplyContent(e.target.value)}
-                disabled={submittingReply}
-              ></textarea>
-            </div>
-            {replyError && <p className="text-red-500 text-sm">{replyError}</p>}
-            <button
-              type="submit"
-              className="w-full bg-java-green-dark text-white py-2 rounded-lg font-semibold hover:bg-java-green-light transition-colors"
-              disabled={submittingReply || !newReplyContent.trim()}
-            >
-              {submittingReply ? 'Mengirim Balasan...' : 'Kirim Balasan'}
-            </button>
-          </form>
-        )}
-      </Card>
-
-      {/* Daftar Balasan */}
-      <div>
-        <h2 className="text-2xl font-bold text-java-brown-dark mb-4">
-          Balasan ({replies.length})
-        </h2>
-        {repliesLoading && <p className="text-center text-gray-600">Memuat balasan...</p>}
-        {repliesError && <p className="text-center text-red-500">Error: {repliesError}</p>}
-        {!repliesLoading && !repliesError && replies.length === 0 && (
-          <p className="text-center text-gray-600">Belum ada balasan untuk postingan ini.</p>
-        )}
-
-        <div className="space-y-4">
-          {replies.map((reply) => (
-            <Card key={reply.id} className="p-4 bg-gray-50 border-l-4 border-java-green-light">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-java-brown-dark text-lg">{reply.authorName}</span>
-                <span className="text-gray-500 text-xs">
-                  {reply.timestamp ? new Date(reply.timestamp.toDate()).toLocaleString() : 'Tanggal tidak diketahui'}
-                </span>
-              </div>
-              <p className="text-gray-700 leading-relaxed">{reply.content}</p>
-              <div className="flex items-center text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
-                <button
-                  onClick={() => handleLikeReply(reply)} // Panggil handler like balasan
-                  className={`flex items-center transition-colors ${
-                    user && reply.likedBy && reply.likedBy.includes(user.uid)
-                      ? 'text-red-500'
-                      : 'hover:text-java-green-dark'
-                  }`}
-                  disabled={!user || authLoading}
-                >
-                  <svg
-                    className={`w-3 h-3 mr-1 ${
-                      user && reply.likedBy && reply.likedBy.includes(user.uid) ? 'fill-current' : 'fill-none'
-                    }`}
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                    ></path>
-                  </svg>
-                  <span>{reply.likesCount || 0} Suka</span>
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </MainLayout>
-  );
-};
-
-export default ForumPostDetailPage;
+  // Handler untuk menghapus balasan
+  const handleDeleteReply = async (replyId: string) => {
+    if (!user || !post || !window.confirm('Apakah Anda yakin ingin menghapus balasan ini?')) {
+      return;
+    }
+    try {
+      await deleteDocument
