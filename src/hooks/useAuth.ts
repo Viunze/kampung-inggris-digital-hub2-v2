@@ -12,7 +12,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { AuthCredentials } from '@/types/auth';
+import { AuthCredentials } from '@/types/auth'; // Pastikan AuthCredentials diexport
 
 // Interface yang mendefinisikan bentuk nilai yang disediakan oleh AuthContext
 interface AuthContextType {
@@ -27,8 +27,8 @@ interface AuthContextType {
 }
 
 // Membuat AuthContext.
-// Kita menggunakan 'AuthContextType | undefined' karena nilai default-nya adalah undefined.
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// TIDAK diekspor, hanya digunakan internal.
 
 // AuthProvider adalah komponen utama yang menyediakan konteks autentikasi.
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Nilai yang akan disediakan oleh konteks
-  const value = {
+  const value: AuthContextType = { // Deklarasi tipe di sini (lebih aman)
     user,
     loading,
     error,
@@ -155,10 +155,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUserProfile,
   };
 
-  // Mengembalikan Provider yang membungkus children
-  // 💡 INI ADALAH PERBAIKAN KRUSIAL: Type Assertion 'as AuthContextType'
-  // Ini memaksa TypeScript/Babel untuk mengenali 'value' sebagai tipe yang benar saat di JSX.
-  return <AuthContext.Provider value={value as AuthContextType}>{children}</AuthContext.Provider>;
+  // ✅ PERBAIKAN KRITIS: Menghapus 'as AuthContextType'
+  // Nilai 'value' sudah memiliki tipe yang benar, tidak perlu type assertion di JSX.
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // useAuth hook untuk mengonsumsi nilai dari AuthContext
@@ -167,5 +166,5 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  return context as AuthContextType; // Type assertion di sini aman
 };
