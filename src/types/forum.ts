@@ -1,6 +1,7 @@
 // src/types/forum.ts
 
 import { Timestamp } from 'firebase/firestore';
+import { storage } from '@/lib/storageAdapter';
 
 /**
  * Interface untuk struktur data postingan forum yang disimpan di Firestore.
