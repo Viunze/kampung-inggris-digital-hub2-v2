@@ -26,7 +26,7 @@ export interface CourseInstitution {
   name: string;
   description: string;
   imageUrl: string; // URL gambar untuk institusi/kursus
-  adress: string; // Contoh: "Jl. Brawijaya No.10, Pare"
+  address: string; // Contoh: "Jl. Brawijaya No.10, Pare"
   priceRange: string; // Contoh: "Rp 500.000 - Rp 2.000.000"
   contactEmail?: string;
   contactPhone?: string;
