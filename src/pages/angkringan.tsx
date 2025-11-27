@@ -1,39 +1,115 @@
 // src/pages/angkringan.tsx
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 import MainLayout from '@/components/Layout/MainLayout';
 import Card from '@/components/UI/Card';
 import { useAuth } from '@/hooks/useAuth';
 import { useFirestoreData } from '@/hooks/useFirestoreData';
 import { ForumPost } from '@/types/models';
-import { addDocument, updateDocument } from '@/lib/firestore'; // Import addDocument dan updateDocument
-import { orderBy, query } from 'firebase/firestore'; // Untuk query
+import { addDocument, updateDocument, deleteDocument } from '@/lib/firestore'; // Import deleteDocument
+import { orderBy } from 'firebase/firestore';
+
+// Komponen Modal Edit Postingan (BARU)
+interface EditPostModalProps {
+  post: ForumPost;
+  onClose: () => void;
+  onSave: (postId: string, newContent: string) => void;
+  loading: boolean;
+  error: string | null;
+}
+
+const EditPostModal: React.FC<EditPostModalProps> = ({ post, onClose, onSave, loading, error }) => {
+  const [editedContent, setEditedContent] = useState(post.content);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editedContent.trim()) {
+      alert("Konten postingan tidak boleh kosong!");
+      return;
+    }
+    onSave(post.id, editedContent.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="p-6 w-full max-w-lg relative">
+        <h2 className="text-2xl font-bold text-java-brown-dark mb-4">Edit Postingan</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="editContent" className="block text-sm font-medium text-gray-700 mb-1">
+              Konten Postingan
+            </label>
+            <textarea
+              id="editContent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-java-green-light focus:outline-none transition-colors h-32 resize-none"
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              disabled={loading}
+            ></textarea>
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+              disabled={loading}
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-java-green-dark text-white rounded-lg font-semibold hover:bg-java-green-light transition-colors"
+              disabled={loading || !editedContent.trim()}
+            >
+              {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+            </button>
+          </div>
+        </form>
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition-colors"
+          disabled={loading}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </Card>
+    </div>
+  );
+};
+
 
 const AngkringanPage: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { data: posts, loading: postsLoading, error: postsError } = useFirestoreData<ForumPost>(
     'forumPosts',
-    [orderBy('timestamp', 'desc')] // Ambil semua postingan, diurutkan terbaru
+    [orderBy('timestamp', 'desc')]
   );
 
   const [newPostContent, setNewPostContent] = useState('');
   const [submittingPost, setSubmittingPost] = useState(false);
-  const [postError, setPostError] = useState<string | null>(null);
+  const [postCreationError, setPostCreationError] = useState<string | null>(null);
+
+  // State untuk Edit/Hapus
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [postToEdit, setPostToEdit] = useState<ForumPost | null>(null);
+  const [editingPost, setEditingPost] = useState(false);
+  const [editPostError, setEditPostError] = useState<string | null>(null);
 
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      setPostError('Anda harus login untuk membuat postingan.');
+      setPostCreationError('Anda harus login untuk membuat postingan.');
       return;
     }
     if (!newPostContent.trim()) {
-      setPostError('Isi postingan tidak boleh kosong.');
+      setPostCreationError('Isi postingan tidak boleh kosong.');
       return;
     }
 
     setSubmittingPost(true);
-    setPostError(null);
+    setPostCreationError(null);
 
     try {
       const newPost: Omit<ForumPost, 'id' | 'timestamp' | 'createdAt' | 'updatedAt'> = {
@@ -42,15 +118,13 @@ const AngkringanPage: React.FC = () => {
         content: newPostContent.trim(),
         repliesCount: 0,
         likesCount: 0,
-        likedBy: [], // Inisialisasi array likedBy
+        likedBy: [],
       };
-      // Explicitly set timestamp here to be used by orderBy in the hook,
-      // and serverTimestamp in addDocument will handle the actual server-side timestamp.
       await addDocument<ForumPost>('forumPosts', { ...newPost, timestamp: new Date() as any });
       setNewPostContent('');
     } catch (err: any) {
       console.error("Error adding forum post:", err);
-      setPostError(err.message || 'Gagal membuat postingan.');
+      setPostCreationError(err.message || 'Gagal membuat postingan.');
     } finally {
       setSubmittingPost(false);
     }
@@ -68,16 +142,13 @@ const AngkringanPage: React.FC = () => {
       const userHasLiked = newLikedBy.includes(user.uid);
 
       if (userHasLiked) {
-        // Unlike: Hapus UID user dari array dan kurangi count
-        newLikesCount = Math.max(0, newLikesCount - 1); // Tidak boleh kurang dari 0
+        newLikesCount = Math.max(0, newLikesCount - 1);
         newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
       } else {
-        // Like: Tambahkan UID user ke array dan tambahkan count
         newLikesCount += 1;
         newLikedBy = [...newLikedBy, user.uid];
       }
 
-      // Update dokumen di Firestore
       await updateDocument<ForumPost>('forumPosts', post.id, {
         likesCount: newLikesCount,
         likedBy: newLikedBy,
@@ -85,6 +156,45 @@ const AngkringanPage: React.FC = () => {
     } catch (err) {
       console.error("Error liking post:", err);
       alert('Gagal menyukai/tidak menyukai postingan.');
+    }
+  };
+
+  // Handler untuk membuka modal edit
+  const openEditModal = (post: ForumPost) => {
+    setPostToEdit(post);
+    setShowEditModal(true);
+  };
+
+  // Handler untuk menyimpan perubahan postingan
+  const handleSaveEditedPost = async (postId: string, newContent: string) => {
+    setEditingPost(true);
+    setEditPostError(null);
+    try {
+      await updateDocument<ForumPost>('forumPosts', postId, { content: newContent });
+      setShowEditModal(false);
+      setPostToEdit(null);
+      // Notifikasi sukses (sederhana)
+      alert('Postingan berhasil diperbarui!');
+    } catch (err: any) {
+      console.error("Error updating post:", err);
+      setEditPostError(err.message || 'Gagal memperbarui postingan.');
+    } finally {
+      setEditingPost(false);
+    }
+  };
+
+  // Handler untuk menghapus postingan
+  const handleDeletePost = async (postId: string) => {
+    if (!user || !window.confirm('Apakah Anda yakin ingin menghapus postingan ini?')) {
+      return;
+    }
+    try {
+      await deleteDocument('forumPosts', postId);
+      // Notifikasi sukses (sederhana)
+      alert('Postingan berhasil dihapus!');
+    } catch (err: any) {
+      console.error("Error deleting post:", err);
+      alert(err.message || 'Gagal menghapus postingan.');
     }
   };
 
@@ -118,7 +228,7 @@ const AngkringanPage: React.FC = () => {
                     disabled={submittingPost}
                   ></textarea>
                 </div>
-                {postError && <p className="text-red-500 text-sm">{postError}</p>}
+                {postCreationError && <p className="text-red-500 text-sm">{postCreationError}</p>}
                 <button
                   type="submit"
                   className="w-full bg-java-green-dark text-white py-2 rounded-lg font-semibold hover:bg-java-green-light transition-colors"
@@ -163,13 +273,13 @@ const AngkringanPage: React.FC = () => {
                 <p className="text-gray-800 leading-relaxed">{post.content}</p>
                 <div className="flex items-center text-sm text-gray-600 space-x-4 pt-2 border-t border-gray-100">
                   <button
-                    onClick={() => handleLikePost(post)} // Panggil handler like
+                    onClick={() => handleLikePost(post)}
                     className={`flex items-center transition-colors ${
                       user && post.likedBy && post.likedBy.includes(user.uid)
-                        ? 'text-red-500' // Jika user sudah like, warna merah
-                        : 'hover:text-java-green-dark' // Default hover
+                        ? 'text-red-500'
+                        : 'hover:text-java-green-dark'
                     }`}
-                    disabled={!user || authLoading} // Nonaktifkan jika belum login atau sedang loading auth
+                    disabled={!user || authLoading}
                   >
                     <svg
                       className={`w-4 h-4 mr-1 ${
@@ -193,8 +303,28 @@ const AngkringanPage: React.FC = () => {
                       <span>{post.repliesCount || 0} Balasan</span>
                     </a>
                   </Link>
+                  {user && user.uid === post.authorId && ( // Hanya tampilkan jika user adalah pemilik
+                    <>
+                      <button
+                        onClick={() => openEditModal(post)}
+                        className="ml-auto text-blue-500 hover:underline flex items-center"
+                        disabled={editingPost}
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeletePost(post.id)}
+                        className="text-red-500 hover:underline flex items-center ml-2"
+                        disabled={editingPost}
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1H9a1 1 0 00-1 1v3m-4 0h16"></path></svg>
+                        Hapus
+                      </button>
+                    </>
+                  )}
                   <Link href={`/angkringan/${post.id}`} legacyBehavior>
-                    <a className="ml-auto text-java-green-dark hover:underline">Lihat Detail</a>
+                    <a className="ml-2 text-java-green-dark hover:underline">Lihat Detail</a>
                   </Link>
                 </div>
               </Card>
@@ -202,6 +332,16 @@ const AngkringanPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showEditModal && postToEdit && (
+        <EditPostModal
+          post={postToEdit}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleSaveEditedPost}
+          loading={editingPost}
+          error={editPostError}
+        />
+      )}
     </MainLayout>
   );
 };
