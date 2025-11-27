@@ -15,10 +15,10 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "baseUrl": ".", // PENTING: Ini adalah root untuk resolving path
+   "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"] // PENTING: Ini mendefinisikan alias @/
-    },
+      "@/*": ["./src/*"] 
+    }
     "plugins": [
       {
         "name": "next"
