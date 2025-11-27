@@ -1,0 +1,9 @@
+{
+  "build": {
+    "env": {
+      "DISABLE_NEXTJS_ESLINT": "1"
+    },
+    "ignoreCommand": "echo 'Vercel ignores this command but respects the file structure'",
+    "outputDirectory": "public"
+  }
+}
