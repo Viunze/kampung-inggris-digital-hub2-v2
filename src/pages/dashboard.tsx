@@ -1,22 +1,16 @@
-// src/pages/dashboard.tsx
+// src/pages/dashboard.tsx (Revisi)
 
 import React from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
 import ProgressCard from '@/components/Dashboard/ProgressCard';
 import TaskCard from '@/components/Dashboard/TaskCard';
-import AngkringanWidget from '@/components/Dashboard/AngkringanWidget';
+import AngkringanWidget from '@/components/Dashboard/AngkringanWidget'; // Ini akan mengambil datanya sendiri
 
-// Dummy data untuk contoh
+// Dummy data untuk contoh progres kursus
 const dummyCourses = [
   { courseTitle: 'English Conversation', progress: 75, lastActivity: 'Last lesson: Introductions' },
   { courseTitle: 'English Conversation Masterclass', progress: 40, lastActivity: 'Last lesson: Modals' },
   { courseTitle: 'Grammar Boost Program', progress: 40, lastActivity: 'Last lesson: Tenses Overview' },
-];
-
-const dummyAngkringanMessages = [
-  { author: 'Bambang', content: 'Ada yang tau tempat fotokopi murah?' },
-  { author: 'Siti', content: 'Di dkt pos polisi, Mas!' },
-  { author: 'Udin', content: 'Gabung no grup WA Angkringan yuk!' },
 ];
 
 const DashboardPage: React.FC = () => {
@@ -49,8 +43,7 @@ const DashboardPage: React.FC = () => {
             description="Kerjakan Latihan Kosakata Bab 5 hari ini untuk mengasah kemampuanmu."
             onClick={() => alert('Buka halaman tugas!')}
           />
-          <AngkringanWidget
-            messages={dummyAngkringanMessages}
+          <AngkringanWidget // Tidak perlu props messages lagi
             onClick={() => alert('Buka halaman Angkringan Digital!')}
           />
         </div>
@@ -58,8 +51,5 @@ const DashboardPage: React.FC = () => {
     </MainLayout>
   );
 };
-
-// Next.js convention for layout in pages directory if not using _app.tsx
-// DashboardPage.getLayout = (page) => <MainLayout>{page}</MainLayout>; // Ini jika Anda ingin layout per halaman
 
 export default DashboardPage;
