@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useFirestoreData } from '@/hooks/useFirestoreData';
 import { ForumPost } from '@/types/models';
 import { addDocument } from '@/lib/firestore'; // Import addDocument
-import { orderBy, limit } from 'firebase/firestore'; // Untuk query
+import { orderBy, query } from 'firebase/firestore'; // Untuk query
 
 const AngkringanPage: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -35,15 +35,17 @@ const AngkringanPage: React.FC = () => {
     setPostError(null);
 
     try {
-      const newPost: Omit<ForumPost, 'id'> = {
+      // Pastikan `timestamp` adalah Date objek, `addDocument` akan mengonversinya ke Firestore Timestamp
+      const newPost: Omit<ForumPost, 'id' | 'timestamp' | 'createdAt' | 'updatedAt'> = {
         authorId: user.uid,
         authorName: user.displayName || user.email || 'Anonim',
         content: newPostContent.trim(),
-        timestamp: new Date(), // `addDocument` akan mengonversi ini ke Firestore Timestamp
         repliesCount: 0,
         likesCount: 0,
       };
-      await addDocument<ForumPost>('forumPosts', newPost);
+      // Explicitly set timestamp here to be used by orderBy in the hook,
+      // and serverTimestamp in addDocument will handle the actual server-side timestamp.
+      await addDocument<ForumPost>('forumPosts', { ...newPost, timestamp: new Date() as any }); // Cast Date to any to match Firestore Timestamp expected by `ForumPost` interface, as `addDocument` will overwrite with serverTimestamp
       setNewPostContent('');
     } catch (err: any) {
       console.error("Error adding forum post:", err);
@@ -122,7 +124,7 @@ const AngkringanPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-java-brown-dark">{post.authorName}</span>
                   <span className="text-gray-500 text-sm">
-                    {post.timestamp ? new Date(post.timestamp).toLocaleString() : 'Tanggal tidak diketahui'}
+                    {post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString() : 'Tanggal tidak diketahui'}
                   </span>
                 </div>
                 <p className="text-gray-800 leading-relaxed">{post.content}</p>
@@ -131,13 +133,15 @@ const AngkringanPage: React.FC = () => {
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
                     <span>{post.likesCount || 0} Suka</span>
                   </button>
-                  <button className="flex items-center hover:text-java-green-dark transition-colors">
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.003 9.003 0 01-4.878-1.333M12 3c4.418 0 8 4.03 8 9s-3.582 9-8 9-9-4.03-9-9 4.03-9 9-9z"></path></svg>
-                    <span>{post.repliesCount || 0} Balasan</span>
-                  </button>
-                  {/* <Link href={`/angkringan/${post.id}`} legacyBehavior>
-                    <a className="ml-auto text-java-green-dark hover:underline">Lihat Detail</a>
-                  </Link> */}
+                  <Link href={`/angkringan/${post.id}`} legacyBehavior> {/* TAMBAHKAN LINK INI */}
+                    <a className="flex items-center hover:text-java-green-dark transition-colors">
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.003 9.003 0 01-4.878-1.333M12 3c4.418 0 8 4.03 8 9s-3.582 9-8 9-9-4.03-9-9 4.03-9 9-9z"></path></svg>
+                      <span>{post.repliesCount || 0} Balasan</span>
+                    </a>
+                  </Link>
+                  <Link href={`/angkringan/${post.id}`} legacyBehavior>
+                    <a className="ml-auto text-java-green-dark hover:underline">Lihat Detail</a> {/* TAMBAHKAN LINK INI JUGA */}
+                  </Link>
                 </div>
               </Card>
             ))}
